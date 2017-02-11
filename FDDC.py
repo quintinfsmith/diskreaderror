@@ -32,6 +32,25 @@ PINS = [(1, 0)]
 CFDDC = CDLL("./liblib.so")
 CFDDC.setup()
 
+def dither(wavelength):
+    sample_size = 100
+    n = round(wavelength * sample_size, 0)
+    out = [0] * sample_size
+    i = 0
+    for _ in range(n):
+        out[i] += 1
+        i = (i + 1) % sample_size
+    for  x in range( sample_size ):
+        while True:
+            a = random.randint(0, sample_size - 1)
+            if out[a] > 1:
+                break
+            b = random.randint(0, sample_size - 1)
+            out[a] -= 1
+            out[b] += 1
+    random.shuffle(out)
+    return out
+
 class FDD(object):
     def __init__(self, index, step, direction):
         self.id = index + 0
@@ -40,9 +59,10 @@ class FDD(object):
         self.in_use = False
         CFDDC.setup_fddmon(index, step, direction)
 
-    def note_on(self, wavelength):
+    def note_on(self, wave):
         self.in_use = True
-        CFDDC.play_fdd(c_int(self.id), c_int(self.step_pin), c_int(self.dir_pin), c_double(wavelength))
+        carr = (c_int * len(wave))(*wave)
+        CFDDC.play_fdd(c_int(self.id), c_int(self.step_pin), c_int(self.dir_pin), c_int(len(wave)), carr)
         return
 
     def note_off(self):
@@ -139,7 +159,8 @@ class FDDC(object):
         for i in range(88):
             f = ((2 ** (i / 12.0)) * base_freq)
             n = base_note + i
-            self.lambdahash[n] = (1000 / f)
+            wave = dither(1000 / f)
+            self.lambdahash[n] = wave
 
     def get_available_fdd(self):
         if self.available:
@@ -204,6 +225,10 @@ class FDDC(object):
         self.play(active)
 
 if __name__ == "__main__":
+    a = dither(1.14)
+    print(sum(a) / len(a))
+
+    sys.exit()
     fddc = FDDC(PINS)
     if len(sys.argv) > 1:
         mi = MIDIInterpreter()

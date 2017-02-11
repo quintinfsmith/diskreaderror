@@ -5,7 +5,8 @@
 
 struct FDDARGS {
     int token; int step; int dir;
-    double wavelength;
+    int wavesize;
+    int* wave;
 };
 
 struct FDDMon {
@@ -34,24 +35,18 @@ void* local_play_fdd(void *fdda) {
     int step = data->step;
     int dir = data->dir;
     int token = data->token;
-    double wavelength = data->wavelength;
+    int wavesize = data->wavesize;
+    int* wave = data->wave;
     int state = 0;
-
-
-    int accum = 0;
-    int remain = (wavelength * 1000);
-    remain %= 1000;
+    int position = 0;
 
     printf("FDD: %d Active\n", token);
 
     fddmon[token].active = 1;
     while (fddmon[token].active == 1) {
-        delay(wavelength);
-        accum += remain;
-        if (accum >= 1000) {
-	    delay(1);
-            accum -= 1000;
-        }
+        delay(wave[position]);
+        position++;
+        position %= wavesize;
 
         digitalWrite(step, state);
         digitalWrite(dir, fddmon[token].direction);
@@ -66,12 +61,13 @@ void* local_play_fdd(void *fdda) {
     return fdda;
 }
 
-void play_fdd(int token, int step_pin, int dir_pin, double wavelength) {
+void play_fdd(int token, int step_pin, int dir_pin, int wavesize, int* wave) {
     struct FDDARGS *fdd_args = calloc(1, sizeof(*fdd_args));
     fdd_args->token = token;
     fdd_args->step = step_pin;
     fdd_args->dir = dir_pin;
-    fdd_args->wavelength = wavelength;
+    fdd_args->wavesize = wavesize;
+    fdd_args->wave = wave;
     pthread_create(&threads[token], NULL, &local_play_fdd, fdd_args);
 }
 
