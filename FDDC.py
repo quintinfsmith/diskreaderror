@@ -4,7 +4,7 @@ import sys
 import time
 import threading
 import random
-from MidiInterpreter import MIDIInterpreter
+from MidiLib.MidiInterpreter import MIDIInterpreter
 
 # Using wiringPi, so the pins numbers are a bit funky
 # wiringPi  :   GPIO    :   BCM (Rv2)
@@ -26,8 +26,9 @@ from MidiInterpreter import MIDIInterpreter
 #   15      :   8       :   14
 #   16      :   10      :   15
 
-PINS = [(1, 0)]
-# PINS = [(1, 0), (2, 3), (4, 5), (7, 6), (9, 8), (11, 10)]
+#PINS = [(2, 3)]
+#PINS = [(1, 0), (7, 6), (9, 8), (11, 10),(2, 3), (4, 5)]
+PINS = [(1, 0), (7, 6), (9, 8), (11, 10)]
 
 CFDDC = CDLL("./liblib.so")
 CFDDC.setup()
@@ -37,17 +38,17 @@ def dither(wavelength):
     n = round(wavelength * sample_size, 0)
     out = [0] * sample_size
     i = 0
-    for _ in range(n):
+    for _ in range(int(n)):
         out[i] += 1
         i = (i + 1) % sample_size
-    for  x in range( sample_size ):
-        while True:
-            a = random.randint(0, sample_size - 1)
-            if out[a] > 1:
-                break
-            b = random.randint(0, sample_size - 1)
-            out[a] -= 1
-            out[b] += 1
+    #for  x in range( sample_size ):
+    #    while True:
+    #        a = random.randint(0, sample_size - 1)
+    #        if out[a] > 1:
+    #            break
+    #        b = random.randint(0, sample_size - 1)
+    #        out[a] -= 1
+    #        out[b] += 1
     random.shuffle(out)
     return out
 
@@ -108,7 +109,7 @@ class PassiveController(object):
         self.playing = False
 
     def __play(self):
-        time.sleep(1) # Give the controller a second to call read() before playing
+        time.sleep(.2) # Give the controller time to call read() before playing
         ptick = 0
         start = time.time()
         self.playing = True
@@ -117,6 +118,7 @@ class PassiveController(object):
             delay = (tick - ptick) * self.spt # ideal delay
             drift = (ptick * self.spt) - (time.time() - start) # how much the timing has drifted
             time.sleep(max(0, delay + drift))
+            if (delay + drift > 3): print(delay + drift) # for debuggery
             for event in events:
                 if event.eid == event.NOTE_ON:
                     if event.velocity != 0:
@@ -154,10 +156,14 @@ class FDDC(object):
             self.fdds.append(new_fdd)
             self.available.add(i)
         self.lambdahash = {}
-        base_freq = 27.50 / 2 # Bring down 1 octaves
+        base_freq = 27.50
         base_note = 21
         for i in range(88):
-            f = ((2 ** (i / 12.0)) * base_freq)
+            if i < 36:
+                x = i
+            else:
+                x = i - 12
+            f = ((2 ** (x / 12.0)) * base_freq)
             n = base_note + i
             wave = dither(1000 / f)
             self.lambdahash[n] = wave
@@ -218,17 +224,13 @@ class FDDC(object):
                 ticks.append((tick, tmp_events))
         passive_controller = PassiveController(ticks, seconds_per_tick)
         self.play(passive_controller)
-        CFDDC.wait_for_end()
+        #CFDDC.wait_for_end()
 
     def active_play(self):
         active = ActiveController()
         self.play(active)
 
 if __name__ == "__main__":
-    a = dither(1.14)
-    print(sum(a) / len(a))
-
-    sys.exit()
     fddc = FDDC(PINS)
     if len(sys.argv) > 1:
         mi = MIDIInterpreter()

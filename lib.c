@@ -36,7 +36,13 @@ void* local_play_fdd(void *fdda) {
     int dir = data->dir;
     int token = data->token;
     int wavesize = data->wavesize;
-    int* wave = data->wave;
+    int* wave = (int *) malloc(100 * sizeof(int));
+    int* twave = data->wave;
+    int i;
+    for (i = 0; i < 100; i++) {
+        wave[i] = twave[i];
+    }
+
     int state = 0;
     int position = 0;
 
