@@ -28,29 +28,13 @@ from MidiLib.MidiInterpreter import MIDIInterpreter
 
 #PINS = [(2, 3)]
 #PINS = [(1, 0), (7, 6), (9, 8), (11, 10),(2, 3), (4, 5)]
-PINS = [(1, 0), (7, 6), (9, 8), (11, 10)]
+PINS = [(1, 0), (2,3), (7, 6), (9, 8), (11, 10)]
 
-CFDDC = CDLL("./liblib.so")
+SAMPLE_SIZE = 200
+
+#CFDDC = CDLL("./fddcontroller.so")
+CFDDC = CDLL("./fddtest.so")
 CFDDC.setup()
-
-def dither(wavelength):
-    sample_size = 100
-    n = round(wavelength * sample_size, 0)
-    out = [0] * sample_size
-    i = 0
-    for _ in range(int(n)):
-        out[i] += 1
-        i = (i + 1) % sample_size
-    #for  x in range( sample_size ):
-    #    while True:
-    #        a = random.randint(0, sample_size - 1)
-    #        if out[a] > 1:
-    #            break
-    #        b = random.randint(0, sample_size - 1)
-    #        out[a] -= 1
-    #        out[b] += 1
-    random.shuffle(out)
-    return out
 
 class FDD(object):
     def __init__(self, index, step, direction):
@@ -58,12 +42,11 @@ class FDD(object):
         self.step_pin = step
         self.dir_pin = direction
         self.in_use = False
-        CFDDC.setup_fddmon(index, step, direction)
+        CFDDC.setup_fddmon(c_int(index), c_int(step), c_int(direction))
 
     def note_on(self, wave):
         self.in_use = True
-        carr = (c_int * len(wave))(*wave)
-        CFDDC.play_fdd(c_int(self.id), c_int(self.step_pin), c_int(self.dir_pin), c_int(len(wave)), carr)
+        succ = CFDDC.play_fdd(c_int(self.id), c_int(int(wave)))
         return
 
     def note_off(self):
@@ -88,18 +71,18 @@ class ActiveController(object):
         self.pipe.close()
 
 class PassiveController(object):
-    def __init__(self, ticks, seconds_per_tick):
-        self.spt = seconds_per_tick
+    def __init__(self, ticks, initial_ppqn):
+        self.initial_ppqn = initial_ppqn
         self.ticks = ticks
         self.fake_pipe = []
         self.playing = False
 
-    def read(self):
-        if not self.playing:
-            thread = threading.Thread(target=self.__play)
-            thread.daemon = True
-            thread.start()
+    def start(self):
+        thread = threading.Thread(target=self.__play)
+        thread.daemon = True
+        thread.start()
 
+    def read(self):
         while not self.fake_pipe:
             pass
         return self.fake_pipe.pop(0)
@@ -113,15 +96,24 @@ class PassiveController(object):
         ptick = 0
         start = time.time()
         self.playing = True
+        seconds_per_tick = 60 / (self.initial_ppqn * 120)
+        delay_accum = 0
+
         for x, t in enumerate(self.ticks):
             tick, events = t
-            delay = (tick - ptick) * self.spt # ideal delay
-            drift = (ptick * self.spt) - (time.time() - start) # how much the timing has drifted
+
+            delay = (tick - ptick) * seconds_per_tick # ideal delay
+            drift = delay_accum - (time.time() - start) # how much the timing has drifted
+            delay_accum += delay
             time.sleep(max(0, delay + drift))
-            if (delay + drift > 3): print(delay + drift) # for debuggery
+            ptick = tick
+
             for event in events:
-                if event.eid == event.NOTE_ON:
-                    if event.velocity != 0:
+                if event.eid == event.SET_TEMPO:
+                    bpm = 60000000 / event.tempo
+                    seconds_per_tick =  60 / (self.initial_ppqn * bpm)
+                elif event.eid == event.NOTE_ON:
+                    if event.velocity > 0:
                         first_byte = 0x90 | event.channel
                         second_byte = event.note
                         third_byte = event.velocity
@@ -147,26 +139,23 @@ class FDDC(object):
         if not pinout:
             pinout = []
 
+
         self.fdds = []
-        self.available = set()
+        self.available = []
         self.in_use = {}
         self.playing = False
         for i, pair in enumerate(pinout):
             new_fdd = FDD(i, pair[0], pair[1])
             self.fdds.append(new_fdd)
-            self.available.add(i)
+            self.available.append(i)
         self.lambdahash = {}
         base_freq = 27.50
         base_note = 21
         for i in range(88):
-            if i < 36:
-                x = i
-            else:
-                x = i - 12
-            f = ((2 ** (x / 12.0)) * base_freq)
+            f = ((2 ** (i / 12.0)) * base_freq)
             n = base_note + i
-            wave = dither(1000 / f)
-            self.lambdahash[n] = wave
+            wavelength = (1000000 / f)
+            self.lambdahash[n] = wavelength
 
     def get_available_fdd(self):
         if self.available:
@@ -174,19 +163,27 @@ class FDDC(object):
         else:
             return -1
 
-    def play_note(self, note):
+    def purge_all(self):
+        for fdd in self.available:
+            print(fdd)
+            CFDDC.purge(c_int(fdd))
+
+    def play_note(self, note, channel):
+        if (note, channel) in self.in_use.keys():
+            return
+
         fdd_index = self.get_available_fdd()
         if fdd_index == -1:
             return
 
-        self.in_use[note] = fdd_index
+        self.in_use[(note, channel)] = fdd_index
         self.fdds[fdd_index].note_on(self.lambdahash[note])
 
-    def stop_note(self, note):
+    def stop_note(self, note, channel):
         try:
-            fdd_index = self.in_use[note]
-            self.available.add(fdd_index)
-            del self.in_use[note]
+            fdd_index = self.in_use[(note, channel)]
+            self.available.append(fdd_index)
+            del self.in_use[(note, channel)]
             self.fdds[fdd_index].note_off()
         except KeyError:
             return
@@ -194,35 +191,44 @@ class FDDC(object):
     def play(self, controller):
         self.playing = True
         print("Playing")
+        os.system("clear")
+        sys.stdout.write("\033[?25l\n")
+        
         while self.playing:
+            sys.stdout.write("\033[0;0H\n")
             try:
                 byte_one = controller.read()
                 if byte_one & 0xF0 == 0x90:
                     note = controller.read()
                     controller.read() # velocity
-                    self.play_note(note)
+                    self.play_note(note, byte_one & 0x0F)
                 elif byte_one & 0xF0 == 0x80:
                     note = controller.read()
                     controller.read() # velocity
-                    self.stop_note(note)
+                    self.stop_note(note, byte_one & 0x0F)
             except KeyboardInterrupt:
                 self.playing = False
+            for i, fdd in enumerate(self.fdds):
+                if i in self.available: state = "0"
+                else: state = "1"
+                sys.stdout.write("%d: %s\n" % (i, state))
+            sys.stdout.write("%s                      \n" % str(self.in_use))
+        sys.stdout.write("\033[?25h\n")
         print("Done")
 
     def passive_play(self, midilike):
-        ticks_per_second = midilike.tpqn * 1.5
-        seconds_per_tick = 1 / ticks_per_second
-
         ticks = []
         for tick in range(len(midilike)):
             tmp_events = []
             for track in midilike.tracks:
                 for event in track.get_events(tick):
-                    if event.eid == event.NOTE_ON or event.eid == event.NOTE_OFF:
+                    if event.eid == event.NOTE_ON or event.eid == event.NOTE_OFF or event.eid == event.SET_TEMPO:
                         tmp_events.append(event)
             if tmp_events:
                 ticks.append((tick, tmp_events))
-        passive_controller = PassiveController(ticks, seconds_per_tick)
+            tmp_events = sorted(tmp_events, key=getKey, reverse=True)
+        passive_controller = PassiveController(ticks, midilike.ppqn)
+        passive_controller.start()
         self.play(passive_controller)
         #CFDDC.wait_for_end()
 
@@ -230,10 +236,16 @@ class FDDC(object):
         active = ActiveController()
         self.play(active)
 
+def getKey(item):
+    return item.eid
+
 if __name__ == "__main__":
     fddc = FDDC(PINS)
+    CFDDC.play_fdd_loop()
+    fddc.purge_all()
     if len(sys.argv) > 1:
         mi = MIDIInterpreter()
         fddc.passive_play(mi(sys.argv[1]))
     else:
         fddc.active_play()
+    CFDDC.kill_loop()
