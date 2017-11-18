@@ -4,7 +4,14 @@ import sys
 import time
 import threading
 import random
+import tty
+import termios
+import math
 from MidiLib.MidiInterpreter import MIDIInterpreter
+
+def get_terminal_size():
+    height, width = os.popen("stty size", "r").read().split()
+    return (int(width), int(height))
 
 # Using wiringPi, so the pins numbers are a bit funky
 # wiringPi  :   GPIO    :   BCM (Rv2)
@@ -27,7 +34,7 @@ from MidiLib.MidiInterpreter import MIDIInterpreter
 #   16      :   10      :   15
 
 #PINS = [(2, 3)]
-PINS = [(0, 2), (3, 12), (13, 14), (8, 9), (15, 16)]
+PINS = [(8, 9), (15, 16), (1, 4), (0, 2), (10, 11), (3, 12), (5, 6), (13, 14)]
 
 SAMPLE_SIZE = 200
 
@@ -175,7 +182,7 @@ class FDDC(object):
             return
 
         if note > self.high_threshold:
-            req = 2
+            req = 1
         else:
             req = 1
 
@@ -196,7 +203,6 @@ class FDDC(object):
             for fdd_index in fdd_indexes:
                 self.available.append(fdd_index)
                 self.fdds[fdd_index].note_off()
-
             del self.in_use[(note, channel)]
         except KeyError:
             return
@@ -217,12 +223,15 @@ class FDDC(object):
         os.system("clear")
         sys.stdout.write("\033[?25l\n")
 
-        display_offsets = [
-            [0, 0], [17, 5],
-            [0, 15], [17, 20],
-            [0, 30]
-        ]
-        
+        d_pos = []
+        w, h = get_terminal_size()
+        r = min(w // 3, h // 3)
+        center = [w // 2, h // 2]
+        for i in range(8):
+            x = int(math.cos(i * (math.pi / 4)) * r)
+            y = int(math.sin(i * (math.pi / 4)) * r)
+            d_pos.append((x, y))
+
         while self.playing:
             sys.stdout.write("\033[0;0H\n")
             try:
@@ -241,18 +250,30 @@ class FDDC(object):
             except KeyboardInterrupt:
                 self.playing = False
 
-            for i, fdd in enumerate(self.fdds):
-                if i in self.available:
-                    colorbg =  41
-                    colorfg =  30
+            # Visualizer
+            for i, (x, y) in enumerate(d_pos):
+                if i >= len(self.fdds): continue
+                colorbg = 40
+                if CFDDC.get_direction(i):
+                    arrow = chr(8679)
                 else:
-                    colorbg =  44
-                    colorfg =  34
-                offx, offy = display_offsets[i]
-                for y in range(14):
-                    sys.stdout.write("\033[%s;%sH\033[%d;%dm              " % (y + offy, offx, colorbg, colorfg))
-                    sys.stdout.write("\033[%s;%sH\033[0m" % (y + offy, offx + 30))
-        
+                    arrow = chr(8681)
+                if i in self.available:
+                    colorfg = 37
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s%s%s\033[0m" % (center[1] + y, center[0] + x, colorbg, colorfg, chr(9484), chr(9472) * 3, chr(9488)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s   %s\033[0m" % (center[1] + y + 1, center[0] + x, colorbg, colorfg, chr(9474), chr(9474)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s %s %s\033[0m" % (center[1] + y + 2, center[0] + x, colorbg, colorfg, chr(9474), arrow, chr(9474)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s   %s\033[0m" % (center[1] + y + 3, center[0] + x, colorbg, colorfg, chr(9474), chr(9474)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s%s%s\033[0m" % (center[1] + y + 4, center[0] + x, colorbg, colorfg, chr(9492), chr(9472) * 3, chr(9496)))
+                else:
+                    colorfg = 32
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s%s%s\033[0m" % (center[1] + y, center[0] + x, colorbg, colorfg, chr(9487), chr(9473) * 3, chr(9491)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s   %s\033[0m" % (center[1] + y + 1, center[0] + x, colorbg, colorfg, chr(9475), chr(9475)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s %s %s\033[0m" % (center[1] + y + 2, center[0] + x, colorbg, colorfg, chr(9475), arrow, chr(9475)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s   %s\033[0m" % (center[1] + y + 3, center[0] + x, colorbg, colorfg, chr(9475), chr(9475)))
+                    sys.stdout.write("\033[%s;%sH\033[%d;%dm%s%s%s\033[0m" % (center[1] + y + 4, center[0] + x, colorbg, colorfg, chr(9495), chr(9473) * 3, chr(9499)))
+            # /Visualizer
+
         sys.stdout.write("\033[?25h\n")
         os.system("clear")
 

@@ -8,7 +8,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define ST_BASE (0x20003000)
+//#define ST_BASE (0x20003000) 
+#define ST_BASE (0x3F003000)
 #define TIMER_OFFSET (4)
 
 
@@ -18,8 +19,8 @@ struct FDDMon {
 };
 
 static int RUNNING = 0;
-static int FDDCOUNT = 5;
-static struct FDDMon fddmon[5];
+static int FDDCOUNT = 8;
+static struct FDDMon fddmon[8];
 static pthread_t mainloop;
 
 void setup() {
@@ -67,11 +68,11 @@ void* _play_fdd_loop() {
                 if (fddmon[x].w_index >= fddmon[x].wavelength) {
                     fddmon[x].w_index = 0;
                     digitalWrite(fddmon[x].step, fddmon[x].state);
+                    digitalWrite(fddmon[x].dir, fddmon[x].direction);
                     fddmon[x].state = ~fddmon[x].state;
                     fddmon[x].index++;
                     if (fddmon[x].index == 120) {
                         fddmon[x].index = 0;
-                        digitalWrite(fddmon[x].dir, fddmon[x].direction);
                         fddmon[x].direction = ~fddmon[x].direction;
                     }
                 }
@@ -80,6 +81,16 @@ void* _play_fdd_loop() {
         prev = t;
     }
     return NULL;
+}
+
+void purge(int token) {
+    int x;
+    for (x = 0; x < 120; x++) {
+        digitalWrite(fddmon[token].step, fddmon[token].state);
+        fddmon[token].state = ~fddmon[token].state;
+        digitalWrite(fddmon[token].dir, 1);
+	delay(1);
+    }
 }
 
 void play_fdd_loop() {
@@ -92,6 +103,10 @@ void play_fdd(int token, int wavelength) {
     fddmon[token].active = 1;
     fddmon[token].w_index = wavelength;
     fddmon[token].wavelength = wavelength;
+}
+
+int get_direction(int token) {
+    return fddmon[token].direction;
 }
 
 void stop_fdd(int token) {
