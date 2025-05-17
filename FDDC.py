@@ -175,7 +175,7 @@ class FDDC(object):
         self.reqmap = {}
 
     def set_map(self, channel, fdds):
-        self.fdd_channel_map[channel] = fdds
+    self.fdd_channel_map[channel] = fdds
     def set_fdds_per_note(self, channel, count):
         self.reqmap[channel] = count
 
@@ -339,17 +339,25 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
             r_active = True
         else:
             paths.append(arg)
-    
+
     return (path, mapped_fdds, req_fdds)
 
-    
+
 
 if __name__ == "__main__":
-    paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
+    try:
+        paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
+    except Exception as e:
+        print(""" Usage:
+python FDDC.py [options] [midi_path]
+Options:
+    -m i:j,k,l      Map channel i to Floppy drives in comma delimited list
+    -r i:n          Channel i will play n drives per note (for volume)
+""")
 
     fddc = FDDC(PINS)
     fddc.purge_all()
-    
+
     if fdd_maps:
         fddc.reset_map()
         for (key, fdds) in fdd_maps:
