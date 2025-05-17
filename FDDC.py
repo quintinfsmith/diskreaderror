@@ -346,6 +346,9 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
 
 if __name__ == "__main__":
     try:
+        if "-h" in sys.argv:
+            raise Exception("throwing an error to bring up the help menu")
+
         paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
     except Exception as e:
         print(""" Usage:
