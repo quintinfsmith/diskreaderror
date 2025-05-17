@@ -1,4 +1,6 @@
 from ctypes import CDLL, c_int, c_double
+from __future__ import annotations
+
 import os
 import sys
 import time
@@ -10,11 +12,6 @@ import math
 import json
 
 from apres import MIDI, NoteOn, NoteOff, SetTempo
-
-
-def get_terminal_size():
-    height, width = os.popen("stty size", "r").read().split()
-    return (int(width), int(height))
 
 # Using wiringPi, so the pins numbers are a bit funky
 # wiringPi  :   GPIO    :   BCM (Rv2)
@@ -36,12 +33,10 @@ def get_terminal_size():
 #   15      :   8       :   14
 #   16      :   10      :   15
 
-#PINS = [(2, 3)]
 PINS = [(9, 8), (16, 15), (4, 1), (2, 0), (11, 10), (12, 3), (6, 5), (14, 13)]
 
 SAMPLE_SIZE = 200
 CFDDC = CDLL("./fddcontroller.so")
-#CFDDC = CDLL("./fddtest.so")
 CFDDC.setup()
 
 class FDD(object):
@@ -147,7 +142,6 @@ class FDDC(object):
     reqmap = {}
     # index'd by Midi Channel, value is fdd index
 
-
     # TODO: Do this nicer
     def __init__(self, pinout=None):
         if not pinout:
@@ -175,16 +169,15 @@ class FDDC(object):
             wavelength = (1000000 / f)
             self.lambdahash[n] = wavelength
 
-    def set_maps(self, **kwargs):
-        if 'map' in kwargs.keys():
-            self.fdd_channel_map = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
-            for key, value in kwargs['map'].items():
-                self.fdd_channel_map[int(key)] = value
+    def reset_map(self):
+        self.fdd_channel_map = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+    def reset_reqmap(self):
+        self.reqmap = {}
 
-        if 'req' in kwargs.keys():
-            for key, value in kwargs['req'].items():
-                self.reqmap[int(key)] = value
-
+    def set_map(self, channel, fdds):
+        self.fdd_channel_map[channel] = fdds
+    def set_fdds_per_note(self, channel, count):
+        self.reqmap[channel] = count
 
     def release_fdd(self, index):
         self.available.append(index)
@@ -323,14 +316,51 @@ def getKey(item):
     else:
         return 3
 
-if __name__ == "__main__":
+def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
+    mapped_fdds = {}
+    req_fdds = {}
+    paths = []
 
-    if len(sys.argv) > 1:
-        with open("maps.json", "r") as fp:
-            maps = json.loads(fp.read())
-        for file_path in sys.argv[1:]:
-            fddc = FDDC(PINS)
-            fddc.purge_all()
+    m_active = False
+    r_active = False
+    for arg in argv:
+        if m_active:
+            i_str, drives_unsplit = arg.split(":")
+            drives_split = drives_str.split(",")
+            mapped_fdds[int(i_str)] = [drives_split[int(x)] for x in drives_split]
+            m_active = False
+        elif r_active:
+            i_str, count = arg.split(":")
+            req_fdds[int(i_str)] = int(count)
+            r_active = False
+        elif arg == "-m":
+            m_active = True
+        elif arg == "-r"
+            r_active = True
+        else:
+            paths.append(arg)
+    
+    return (path, mapped_fdds, req_fdds)
+
+    
+
+if __name__ == "__main__":
+    paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
+
+    fddc = FDDC(PINS)
+    fddc.purge_all()
+    
+    if fdd_maps:
+        fddc.reset_map()
+        for (key, fdds) in fdd_maps:
+            fddc.set_map[key] = fdds
+
+    if channel_counts:
+        for (channel, count) in channel_counts:
+            fddc.set_req_map(channel, count)
+
+    if paths:
+        for file_path in paths:
             CFDDC.play_fdd_loop()
             filename = file_path[file_path.rfind("/") + 1:]
             if filename in maps.keys():
@@ -339,9 +369,6 @@ if __name__ == "__main__":
             fddc.passive_play(ml)
             CFDDC.kill_loop()
     else:
-        print("FROM INPUT")
-        fddc = FDDC(PINS)
-        fddc.purge_all()
         CFDDC.play_fdd_loop()
         fddc.active_play()
         CFDDC.kill_loop()

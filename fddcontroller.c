@@ -8,10 +8,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-//#define ST_BASE (0x20003000) 
 #define ST_BASE (0x3F003000)
 #define TIMER_OFFSET (4)
-
 
 struct FDDMon {
     int index, direction, active, step, dir, wavelength;
