@@ -138,8 +138,6 @@ class PassiveController(object):
 
 class FDDC(object):
 
-    fdd_channel_map = [list(range(8))] * 16
-    reqmap = {}
     # index'd by Midi Channel, value is fdd index
 
     # TODO: Do this nicer
@@ -149,6 +147,9 @@ class FDDC(object):
 
         # The note at which multiple fdds are required to be able to hear it
         self.high_threshold = 81
+
+        self.fdd_channel_map = [list(range(8))] * 16
+        self.reqmap = {}
 
         self.available = []
         self.fdds = []
@@ -294,11 +295,6 @@ class FDDC(object):
         #CFDDC.wait_for_end()
 
     def active_play(self):
-        fddc.set_fdds_per_note(0, 4)
-        fddc.set_map(0, [0,1,2,3])
-        fddc.set_map(1, [6])
-        fddc.set_map(2, [4,5])
-
         active = ActiveController()
         self.play(active)
 
@@ -320,8 +316,9 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
     for arg in argv:
         if m_active:
             i_str, drives_unsplit = arg.split(":")
-            drives_split = drives_str.split(",")
-            mapped_fdds[int(i_str)] = [drives_split[int(x)] for x in drives_split]
+            drives_split = drives_unsplit.split(",")
+            print(drives_split, i_str, "||")
+            mapped_fdds[int(i_str)] = [drives_split[i] for i, x in enumerate(drives_split)]
             m_active = False
         elif r_active:
             i_str, count = arg.split(":")
@@ -334,7 +331,7 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
         else:
             paths.append(arg)
 
-    return (path, mapped_fdds, req_fdds)
+    return (paths, mapped_fdds, req_fdds)
 
 
 
@@ -348,6 +345,7 @@ if __name__ == "__main__":
 
         paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
     except Exception as e:
+        print(e)
         pass
 #         print(""" Usage:
 # python FDDC.py [options] [midi_path]
@@ -359,13 +357,14 @@ if __name__ == "__main__":
     fddc = FDDC(PINS)
     fddc.purge_all()
 
+
     if fdd_maps:
         fddc.reset_map()
-        for (key, fdds) in fdd_maps:
-            fddc.set_map[key] = fdds
+        for (key, fdds) in fdd_maps.items():
+            fddc.set_map(key, fdds)
 
     if channel_counts:
-        for (channel, count) in channel_counts:
+        for (channel, count) in channel_counts.items():
             fddc.set_fdds_per_note(channel, count)
 
     if paths:
@@ -378,6 +377,7 @@ if __name__ == "__main__":
             fddc.passive_play(ml)
             CFDDC.kill_loop()
     else:
+        print(fddc.fdd_channel_map)
         CFDDC.play_fdd_loop()
         fddc.active_play()
         CFDDC.kill_loop()
