@@ -1,5 +1,5 @@
-from ctypes import CDLL, c_int, c_double
 from __future__ import annotations
+from ctypes import CDLL, c_int, c_double
 
 import os
 import sys
@@ -171,11 +171,13 @@ class FDDC(object):
 
     def reset_map(self):
         self.fdd_channel_map = [[],[],[],[],[],[],[],[],[],[],[],[],[],[],[],[]]
+
     def reset_reqmap(self):
         self.reqmap = {}
 
     def set_map(self, channel, fdds):
-    self.fdd_channel_map[channel] = fdds
+        self.fdd_channel_map[channel] = fdds
+
     def set_fdds_per_note(self, channel, count):
         self.reqmap[channel] = count
 
@@ -292,18 +294,10 @@ class FDDC(object):
         #CFDDC.wait_for_end()
 
     def active_play(self):
-        fddc.set_maps(**{
-            "req": {
-                0: 4,
-                1: 1,
-                2: 2
-            },
-            "map": {
-                "0": [0,1,2,3],
-                "1": [6],
-                "2": [4, 5]
-            }
-        })
+        fddc.set_fdds_per_note(0, 4)
+        fddc.set_map(0, [0,1,2,3])
+        fddc.set_map(1, [6])
+        fddc.set_map(2, [4,5])
 
         active = ActiveController()
         self.play(active)
@@ -335,7 +329,7 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
             r_active = False
         elif arg == "-m":
             m_active = True
-        elif arg == "-r"
+        elif arg == "-r":
             r_active = True
         else:
             paths.append(arg)
@@ -345,18 +339,22 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
 
 
 if __name__ == "__main__":
+    fdd_maps = {}
+    paths = []
+    channel_counts = {}
     try:
         if "-h" in sys.argv:
             raise Exception("throwing an error to bring up the help menu")
 
         paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
     except Exception as e:
-        print(""" Usage:
-python FDDC.py [options] [midi_path]
-Options:
-    -m i:j,k,l      Map channel i to Floppy drives in comma delimited list
-    -r i:n          Channel i will play n drives per note (for volume)
-""")
+        pass
+#         print(""" Usage:
+# python FDDC.py [options] [midi_path]
+# Options:
+#     -m i:j,k,l      Map channel i to Floppy drives in comma delimited list
+#     -r i:n          Channel i will play n drives per note (for volume)
+# """)
 
     fddc = FDDC(PINS)
     fddc.purge_all()
@@ -368,14 +366,14 @@ Options:
 
     if channel_counts:
         for (channel, count) in channel_counts:
-            fddc.set_req_map(channel, count)
+            fddc.set_fdds_per_note(channel, count)
 
     if paths:
         for file_path in paths:
             CFDDC.play_fdd_loop()
             filename = file_path[file_path.rfind("/") + 1:]
             if filename in maps.keys():
-                fddc.set_maps(**maps[filename])
+                fddc.set_map(**maps[filename])
             ml = MIDI.load(file_path)
             fddc.passive_play(ml)
             CFDDC.kill_loop()
