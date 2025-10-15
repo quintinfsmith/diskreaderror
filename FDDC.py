@@ -317,7 +317,7 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
         if m_active:
             i_str, drives_unsplit = arg.split(":")
             drives_split = drives_unsplit.split(",")
-            mapped_fdds[int(i_str)] = [drives_split[i] for i, x in enumerate(drives_split)]
+            mapped_fdds[int(i_str)] = [int(drives_split[i]) for i, x in enumerate(drives_split)]
             m_active = False
         elif r_active:
             i_str, count = arg.split(":")
@@ -355,6 +355,7 @@ if __name__ == "__main__":
     fddc = FDDC(PINS)
     fddc.purge_all()
 
+
     if fdd_maps:
         fddc.reset_map()
         for (key, fdds) in fdd_maps.items():
@@ -370,7 +371,6 @@ if __name__ == "__main__":
             filename = file_path[file_path.rfind("/") + 1:]
             if filename in maps.keys():
                 fddc.set_map(**maps[filename])
-
             ml = MIDI.load(file_path)
             fddc.passive_play(ml)
             CFDDC.kill_loop()
