@@ -317,7 +317,6 @@ def parse_args(argv: list[str]) -> tuple[list[str], dict, dict]:
         if m_active:
             i_str, drives_unsplit = arg.split(":")
             drives_split = drives_unsplit.split(",")
-            print(drives_split, i_str, "||")
             mapped_fdds[int(i_str)] = [drives_split[i] for i, x in enumerate(drives_split)]
             m_active = False
         elif r_active:
@@ -345,7 +344,6 @@ if __name__ == "__main__":
 
         paths, fdd_maps, channel_counts = parse_args(sys.argv[1:])
     except Exception as e:
-        print(e)
         pass
 #         print(""" Usage:
 # python FDDC.py [options] [midi_path]
@@ -356,7 +354,6 @@ if __name__ == "__main__":
 
     fddc = FDDC(PINS)
     fddc.purge_all()
-
 
     if fdd_maps:
         fddc.reset_map()
@@ -373,11 +370,11 @@ if __name__ == "__main__":
             filename = file_path[file_path.rfind("/") + 1:]
             if filename in maps.keys():
                 fddc.set_map(**maps[filename])
+
             ml = MIDI.load(file_path)
             fddc.passive_play(ml)
             CFDDC.kill_loop()
     else:
-        print(fddc.fdd_channel_map)
         CFDDC.play_fdd_loop()
         fddc.active_play()
         CFDDC.kill_loop()
